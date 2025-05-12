@@ -44,18 +44,24 @@ async function runPythonScript(
   time: string
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    const pythonProcess = spawn("python", [
-      path.join(__dirname, "..", "Script", "receipt.py"),
-      name,
-      amount,
-      time,
-    ]);
+    const scriptDir = path.join(__dirname, "..", "Script");
+    // Format data as Python dictionary
+    const dataDict = JSON.stringify({
+      name: name,
+      amount: amount,
+      time: time,
+    });
+    const pythonProcess = spawn(
+      "python",
+      [path.join(scriptDir, "receipt.py"), dataDict],
+      {
+        cwd: scriptDir, // Set the working directory to the Script directory
+      }
+    );
 
     pythonProcess.on("close", (code) => {
       if (code === 0) {
-        resolve(
-          path.join(__dirname, "..", "Script", "check_with_name_shifted_v4.png")
-        );
+        resolve(path.join(scriptDir, "check_with_name_shifted_v4.png"));
       } else {
         reject(new Error(`Python script exited with code ${code}`));
       }
@@ -102,7 +108,7 @@ bot.use(createConversation(receiptConversation));
 
 // Command to start the conversation
 bot.command("start", async (ctx) => {
-  await ctx.conversation.enter("receipt");
+  await ctx.conversation.enter("receiptConversation");
 });
 
 // Add error handler
