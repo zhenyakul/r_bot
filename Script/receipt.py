@@ -1,5 +1,7 @@
 from PIL import Image, ImageDraw, ImageFont
 import os
+import json
+import sys
 
 def create_receipt(amount, name, custom_time):
     # Пути к шрифтам
@@ -88,6 +90,26 @@ def create_receipt(amount, name, custom_time):
         template.save(output_file, quality=100, optimize=False)
         template.show()
 
-# Пример использования:
+# Example usage:
 if __name__ == "__main__":
-    create_receipt("238 000 ₽", "Сунь Хуй С.", "20:09")
+    if len(sys.argv) != 2:
+        print("Usage: python receipt.py '{\"name\": \"John Doe\", \"amount\": \"238 000 ₽\", \"time\": \"20:09\"}'")
+        sys.exit(1)
+    
+    try:
+        # Parse the dictionary string from command line argument
+        data = json.loads(sys.argv[1])
+        
+        # Extract values from dictionary
+        amount = data.get("amount", "")
+        name = data.get("name", "")
+        time = data.get("time", "")
+        
+        # Create receipt with the data
+        create_receipt(amount, name, time)
+    except json.JSONDecodeError:
+        print("Error: Invalid JSON format")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        sys.exit(1)
