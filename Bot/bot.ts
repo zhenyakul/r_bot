@@ -16,6 +16,7 @@ import {
 import * as fs from "fs";
 import * as dotenv from "dotenv";
 import { SberbankReceipt } from "./services/sberbankReceipt";
+import { SberbankBillReceipt } from "./services/sberbankBillReceipt";
 
 // Load environment variables from .env file
 dotenv.config();
@@ -38,8 +39,9 @@ type BotContext = Context & SessionFlavor<SessionData> & ConversationFlavor;
 // Create bot instance
 const bot = new Bot<BotContext>(process.env.BOT_TOKEN);
 
-// Initialize receipt generator
+// Initialize receipt generators
 const sberbankReceipt = new SberbankReceipt();
+const sberbankBillReceipt = new SberbankBillReceipt();
 
 // Add session middleware
 bot.use(session({ initial: () => ({}) }));
@@ -100,14 +102,17 @@ const receiptConversation = async (
   // Process the data
   try {
     await ctx.reply("Generating receipt...");
-    const imagePath = await sberbankReceipt.generateReceipt({
+    const imagePaths = await sberbankReceipt.generateReceipt({
       name,
       amount,
       time,
     });
 
-    // Send the generated image
-    await ctx.replyWithPhoto(new InputFile(fs.createReadStream(imagePath)));
+    // Send both light and dark versions
+    for (const imagePath of imagePaths) {
+      await ctx.replyWithPhoto(new InputFile(fs.createReadStream(imagePath)));
+    }
+
     await ctx.reply("Receipt generated successfully!", {
       reply_markup: createMainMenu(),
     });
@@ -119,6 +124,80 @@ const receiptConversation = async (
 
 // Register the conversation
 bot.use(createConversation(receiptConversation));
+
+// Create conversation for collecting bill data
+const billReceiptConversation = async (
+  conversation: Conversation<BotContext>,
+  ctx: BotContext
+) => {
+  // Ask for amount
+  await ctx.reply("Введите сумму (например, '75 000 ₽'):");
+  const amountCtx = await conversation.wait();
+  const amount = amountCtx.message?.text || "";
+
+  // Ask for time
+  await ctx.reply("Введите время (например, '15:30'):");
+  const timeCtx = await conversation.wait();
+  const time = timeCtx.message?.text || "";
+
+  // Ask for amount_decimal
+  await ctx.reply("Введите копейки (например, '50'):");
+  const amount_decimalCtx = await conversation.wait();
+  const amount_decimal = amount_decimalCtx.message?.text || "";
+
+  // Ask for value_420
+  await ctx.reply("Введите значение 420 (например, '420,52'):");
+  const value_420Ctx = await conversation.wait();
+  const value_420 = value_420Ctx.message?.text || "";
+
+  // Ask for value_1234
+  await ctx.reply("Введите значение 1234 (например, '5678'):");
+  const value_1234Ctx = await conversation.wait();
+  const value_1234 = value_1234Ctx.message?.text || "";
+
+  // Ask for value_9876
+  await ctx.reply("Введите значение 9876 (например, '4321'):");
+  const value_9876Ctx = await conversation.wait();
+  const value_9876 = value_9876Ctx.message?.text || "";
+
+  // Ask for value_10000
+  await ctx.reply("Введите значение 10000 (например, '15 000'):");
+  const value_10000Ctx = await conversation.wait();
+  const value_10000 = value_10000Ctx.message?.text || "";
+
+  // Process the data
+  try {
+    await ctx.reply("Генерация чеков...");
+    const imagePaths = await sberbankBillReceipt.generateBillReceipt({
+      amount,
+      time,
+      amount_decimal,
+      value_420,
+      value_1234,
+      value_9876,
+      value_10000,
+    });
+
+    // Send both light and dark versions
+    for (const imagePath of imagePaths) {
+      await ctx.replyWithPhoto(new InputFile(fs.createReadStream(imagePath)));
+    }
+    await ctx.reply("Чеки успешно сгенерированы!", {
+      reply_markup: createSberbankMenu(),
+    });
+  } catch (error) {
+    console.error("Ошибка при генерации чеков:", error);
+    await ctx.reply(
+      "Ошибка при генерации чеков. Пожалуйста, попробуйте снова.",
+      {
+        reply_markup: createSberbankMenu(),
+      }
+    );
+  }
+};
+
+// Register the conversation
+bot.use(createConversation(billReceiptConversation));
 
 // Command to start the bot and show main menu
 bot.command("start", async (ctx) => {
@@ -143,12 +222,7 @@ bot.hears("Тинькофф", async (ctx) => {
 // Handle Sberbank balance options
 bot.callbackQuery("sber_main", async (ctx) => {
   await ctx.answerCallbackQuery();
-  await ctx.editMessageText(
-    "Сбербанк (Главная):\nБаланс: 75,000 ₽\nНомер счета: **** 1234",
-    {
-      reply_markup: createSberbankMenu(),
-    }
-  );
+  await ctx.conversation.enter("billReceiptConversation");
 });
 
 bot.callbackQuery("sber_card", async (ctx) => {

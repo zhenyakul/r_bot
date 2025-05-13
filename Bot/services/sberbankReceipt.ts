@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import * as path from "node:path";
+import * as fs from "fs";
 
 interface ReceiptData {
   name: string;
@@ -12,9 +13,11 @@ export class SberbankReceipt {
   private readonly pythonPath: string;
 
   constructor() {
-    this.scriptDir = path.join(process.cwd(), "..", "Script");
-    // Try to find Python in common locations
+    // Get the absolute path to the script directory
+    this.scriptDir = path.resolve(process.cwd(), "..", "script");
+    console.log("Script directory:", this.scriptDir);
     this.pythonPath = this.findPythonPath();
+    console.log("Python path:", this.pythonPath);
   }
 
   private findPythonPath(): string {
@@ -54,26 +57,78 @@ export class SberbankReceipt {
     );
   }
 
-  async generateReceipt(data: ReceiptData): Promise<string> {
+  async generateReceipt(data: ReceiptData): Promise<string[]> {
     return new Promise((resolve, reject) => {
-      const dataDict = JSON.stringify(data);
-      const pythonProcess = spawn(
-        this.pythonPath,
-        [path.join(this.scriptDir, "receipt.py"), dataDict],
-        {
-          cwd: this.scriptDir,
-        }
-      );
+      // Prepare the data for the Python script
+      const scriptData = {
+        name: data.name,
+        amount: data.amount,
+        time: data.time,
+      };
+
+      // Convert data to JSON string
+      const jsonData = JSON.stringify(scriptData);
+      console.log("Sending data to Python:", jsonData);
+
+      const scriptPath = path.join(this.scriptDir, "receipt.py");
+      console.log("Python script path:", scriptPath);
+
+      // Spawn Python process with the correct working directory
+      const pythonProcess = spawn(this.pythonPath, [scriptPath, jsonData], {
+        cwd: this.scriptDir,
+        env: {
+          ...process.env,
+          PYTHONIOENCODING: "utf-8",
+          PYTHONUNBUFFERED: "1", // Force Python to flush output
+        },
+      });
+
+      let errorOutput = "";
+      let scriptOutput = "";
+
+      pythonProcess.stderr.on("data", (data) => {
+        const output = data.toString();
+        errorOutput += output;
+        console.error("Python stderr:", output);
+      });
+
+      pythonProcess.stdout.on("data", (data) => {
+        const output = data.toString();
+        scriptOutput += output;
+        console.log("Python stdout:", output);
+      });
 
       pythonProcess.on("close", (code) => {
+        console.log("Python process exited with code:", code);
+        console.log("Script output:", scriptOutput);
+        console.log("Error output:", errorOutput);
+
         if (code === 0) {
-          resolve(path.join(this.scriptDir, "check_with_name_shifted_v4.png"));
+          const lightPath = path.join(this.scriptDir, "check_light.png");
+          const darkPath = path.join(this.scriptDir, "check_dark.png");
+          console.log("Checking for output files at:", lightPath, darkPath);
+
+          if (fs.existsSync(lightPath) && fs.existsSync(darkPath)) {
+            console.log("Output files exist");
+            resolve([lightPath, darkPath]);
+          } else {
+            const error = new Error(
+              `Receipt images were not generated. Python output: ${scriptOutput}`
+            );
+            console.error(error);
+            reject(error);
+          }
         } else {
-          reject(new Error(`Python script exited with code ${code}`));
+          const error = new Error(
+            `Python script failed with code ${code}: ${errorOutput}`
+          );
+          console.error(error);
+          reject(error);
         }
       });
 
       pythonProcess.on("error", (error) => {
+        console.error("Failed to start Python process:", error);
         reject(new Error(`Failed to start Python process: ${error.message}`));
       });
     });

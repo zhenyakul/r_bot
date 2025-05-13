@@ -8,13 +8,13 @@
     "build": "tsc"
   },
   "dependencies": {
-    "grammy": "^1.21.1",
     "@grammyjs/conversations": "^1.1.1",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "grammy": "^1.21.1"
   },
   "devDependencies": {
-    "typescript": "^5.3.3",
+    "@types/node": "^20.17.46",
     "ts-node": "^10.9.2",
-    "@types/node": "^20.11.19"
+    "typescript": "^5.3.3"
   }
 }
